@@ -72,6 +72,8 @@ canvas.addEventListener('click', (e) => {
   clicks.push({ x, y });
   clickStage++;
 
+  drawCanvas(); // redraw image and click markers
+
   if (clickStage < 3) {
     output.textContent =
       `Point recorded.\n\nNext: ${instructions[clickStage]}`;
@@ -96,9 +98,7 @@ function processGraph(maxYvalue) {
 
   const [origin, xTop, yTop] = clicks;
 
-  // Correct vertical pixel range
   const pixelYrange = origin.y - yTop.y;
-
   if (pixelYrange <= 0) {
     output.textContent =
       "Error: Y-axis top must be ABOVE origin.\nReload image and click again.";
@@ -107,15 +107,48 @@ function processGraph(maxYvalue) {
 
   const bars = detectBars();
 
-  const calibrated = bars.map(pix => {
-    if (!isFinite(pix)) return "Unreadable";
-    return ((pix / pixelYrange) * maxYvalue).toFixed(3);
+  // Draw bar top markers
+  drawCanvas(); // redraw image and calibration clicks first
+  ctx.fillStyle = 'red';
+  bars.forEach(bar => {
+    if (!isNaN(bar.topY)) {
+      ctx.beginPath();
+      ctx.arc(bar.midX, bar.topY, 4, 0, Math.PI * 2);
+      ctx.fill();
+    }
   });
 
-  let text = `Detected Bar Values (0–${maxYvalue} scale):\n\n`;
+  // Calculate values left-to-right
+  bars.sort((a, b) => a.midX - b.midX);
+
+  const calibrated = bars.map(bar => {
+    if (!isFinite(bar.height)) return "Unreadable";
+    return ((bar.height / pixelYrange) * maxYvalue).toFixed(3);
+  });
+
+  let text = `Detected Bar Values (0–${maxYvalue} scale), left to right:\n\n`;
   calibrated.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
 
   output.textContent = text;
+}
+
+/* ----------------------------
+   DRAW IMAGE AND CLICK MARKERS
+---------------------------- */
+function drawCanvas() {
+  if (!imgBitmap) return;
+  ctx.drawImage(imgBitmap, 0, 0);
+
+  // Draw click markers
+  clicks.forEach((pt, i) => {
+    ctx.fillStyle = ['blue', 'green', 'orange'][i] || 'black';
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.font = '14px Arial';
+    ctx.fillText(['ORIGIN','X-TOP','Y-TOP'][i], pt.x + 6, pt.y - 6);
+  });
 }
 
 /* ----------------------------
@@ -137,7 +170,7 @@ function convertToBW() {
 }
 
 /* ----------------------------
-   BAR DETECTION (BLACK & WHITE IMAGE)
+   BAR DETECTION
 ---------------------------- */
 function detectBars() {
   const w = canvas.width;
@@ -145,14 +178,11 @@ function detectBars() {
   const data = ctx.getImageData(0, 0, w, h).data;
 
   const darkness = [];
-
   for (let x = 0; x < w; x++) {
     let dark = 0;
-
     for (let y = 0; y < h; y++) {
       if (data[(y * w + x) * 4] === 0) dark++;
     }
-
     darkness.push(dark);
   }
 
@@ -176,16 +206,13 @@ function detectBars() {
   return bars.map(bar => {
     const mid = Math.floor((bar.start + bar.end) / 2);
     let topY = null;
-
     for (let y = 0; y < h; y++) {
       if (data[(y * w + mid) * 4] === 0) {
         topY = y;
         break;
       }
     }
-
-    if (topY === null) return NaN;
-
-    return h - topY;
+    if (topY === null) return { midX: mid, topY: null, height: NaN };
+    return { midX: mid, topY, height: h - topY };
   });
 }
