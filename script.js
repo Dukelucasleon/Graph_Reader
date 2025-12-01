@@ -5,8 +5,6 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 
 let imgBitmap = null;
-
-// Calibration points (clicked by the user)
 let clicks = [];
 let clickStage = 0;
 
@@ -16,17 +14,16 @@ const instructions = [
   "Click the TOP OF THE Y AXIS."
 ];
 
-imageInput.addEventListener('change', async (event) => {
+imageInput.addEventListener('change', (event) => {
   const file = event.target.files[0];
   if (file) loadImage(file);
 });
 
-pasteZone.addEventListener('paste', async (event) => {
+pasteZone.addEventListener('paste', (event) => {
   const items = event.clipboardData.items;
   for (let item of items) {
     if (item.type.indexOf('image') !== -1) {
-      const blob = item.getAsFile();
-      loadImage(blob);
+      loadImage(item.getAsFile());
       break;
     }
   }
@@ -34,6 +31,8 @@ pasteZone.addEventListener('paste', async (event) => {
 
 async function loadImage(blob) {
   imgBitmap = await createImageBitmap(blob);
+
+  // Set canvas to exact image pixel size
   canvas.width = imgBitmap.width;
   canvas.height = imgBitmap.height;
 
@@ -42,18 +41,29 @@ async function loadImage(blob) {
   clickStage = 0;
   clicks = [];
 
-  output.textContent = 
+  output.textContent =
     "Image loaded.\n\n" +
     "Now: " + instructions[clickStage] +
     "\n\nClick directly on the image.";
 }
 
+/* ----------------------------------------------------------
+   CLICK HANDLING (FIXED)
+---------------------------------------------------------- */
+
 canvas.addEventListener('click', (e) => {
   if (!imgBitmap) return;
 
+  // FIX: properly compute canvas-based coordinates even if resized
   const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
+
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+
+  const x = (e.clientX - rect.left) * scaleX;
+  const y = (e.clientY - rect.top) * scaleY;
+
+  console.log("Click:", x, y);
 
   clicks.push({ x, y });
   clickStage++;
@@ -61,107 +71,98 @@ canvas.addEventListener('click', (e) => {
   if (clickStage < 3) {
     output.textContent =
       `Point recorded.\n\nNext: ${instructions[clickStage]}`;
-  } 
-  else {
-    output.textContent = "All calibration points recorded.\n\nReading graph...";
-    setTimeout(processGraph, 200);
+  } else {
+    output.textContent = "All points recorded.\n\nProcessing graph...";
+    setTimeout(processGraph, 300);
   }
 });
 
+/* ----------------------------------------------------------
+   PROCESS GRAPH
+---------------------------------------------------------- */
 
-// --------------------------------------------------
-// PROCESS GRAPH
-// --------------------------------------------------
 function processGraph() {
-  convertToBlackAndWhite();
+  convertToBW();
 
   const [origin, xTop, yTop] = clicks;
 
-  const pixelYrange = origin.y - xTop.y; // Height the chart uses for Y axis
+  const pixelYrange = origin.y - xTop.y;
 
-  const bars = extractBarsBW();
+  const bars = detectBars();
 
-  const calibratedValues = bars.map(pixels => {
-    return (pixels / pixelYrange).toFixed(3);
-  });
+  const calibrated = bars.map(pixels =>
+    (pixels / pixelYrange).toFixed(3)
+  );
 
-  let txt = "Detected Bar Values (Calibrated):\n\n";
-  calibratedValues.forEach((v, i) => {
-    txt += `Bar ${i + 1}: ${v}\n`;
-  });
+  let text = "Detected Bar Values (Calibrated):\n\n";
+  calibrated.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
 
-  output.textContent = txt;
+  output.textContent = text;
 }
 
+/* ----------------------------------------------------------
+   BLACK & WHITE CONVERSION
+---------------------------------------------------------- */
 
-// --------------------------------------------------
-// CONVERT TO BLACK & WHITE
-// --------------------------------------------------
-function convertToBlackAndWhite() {
+function convertToBW() {
   const w = canvas.width;
   const h = canvas.height;
-  const imgData = ctx.getImageData(0, 0, w, h);
-  const d = imgData.data;
+  const img = ctx.getImageData(0, 0, w, h);
+  const d = img.data;
 
   for (let i = 0; i < d.length; i += 4) {
-    const r = d[i], g = d[i+1], b = d[i+2];
-    const brightness = (r + g + b) / 3;
-
-    const v = brightness < 150 ? 0 : 255; // threshold
+    const bright = (d[i] + d[i+1] + d[i+2]) / 3;
+    const v = bright < 150 ? 0 : 255;
     d[i] = d[i+1] = d[i+2] = v;
   }
 
-  ctx.putImageData(imgData, 0, 0);
+  ctx.putImageData(img, 0, 0);
 }
 
+/* ----------------------------------------------------------
+   BAR DETECTION
+---------------------------------------------------------- */
 
-// --------------------------------------------------
-// EXTRACT BARS FROM BLACK & WHITE IMAGE
-// --------------------------------------------------
-function extractBarsBW() {
+function detectBars() {
   const w = canvas.width;
   const h = canvas.height;
   const data = ctx.getImageData(0, 0, w, h).data;
 
-  const colDarkness = [];
+  const darkness = [];
 
   for (let x = 0; x < w; x++) {
-    let darkPixels = 0;
+    let dark = 0;
 
     for (let y = 0; y < h; y++) {
-      const i = (y * w + x) * 4;
-      const v = data[i]; // R channel after B&W (0 or 255)
-      if (v === 0) darkPixels++;
+      if (data[(y * w + x) * 4] === 0) dark++;
     }
 
-    colDarkness.push(darkPixels);
+    darkness.push(dark);
   }
 
-  const threshold = Math.max(...colDarkness) * 0.4;
-  const bars = [];
+  const threshold = Math.max(...darkness) * 0.4;
 
+  let bars = [];
   let inBar = false;
   let start = 0;
 
   for (let x = 0; x < w; x++) {
-    if (!inBar && colDarkness[x] > threshold) {
+    if (!inBar && darkness[x] > threshold) {
       inBar = true;
       start = x;
     }
-    if (inBar && colDarkness[x] <= threshold) {
+    if (inBar && darkness[x] <= threshold) {
       inBar = false;
       bars.push({ start, end: x });
     }
   }
 
-  // Measure bar heights in pixels
-  const barHeights = bars.map(bar => {
+  return bars.map(bar => {
     const mid = Math.floor((bar.start + bar.end) / 2);
-
     let topY = null;
+
     for (let y = 0; y < h; y++) {
-      const i = (y * w + mid) * 4;
-      if (data[i] === 0) {
+      if (data[(y * w + mid) * 4] === 0) {
         topY = y;
         break;
       }
@@ -169,6 +170,4 @@ function extractBarsBW() {
 
     return h - topY;
   });
-
-  return barHeights;
 }
