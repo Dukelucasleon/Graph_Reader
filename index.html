@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GRAPH READER LL</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <h1>Upload or Paste Bar Graph to Process</h1>
+  <p class="subtitle">
+    Upload a clear bar graph image. The program will automatically detect bar heights and output
+    numerical values. Ensure the graph has visible axes and clear bars.
+  </p>
+
+  <div class="upload-area">
+    <label for="imageInput" class="upload-button">Choose Image</label>
+    <input type="file" id="imageInput" accept="image/*" hidden />
+
+    <div id="pasteZone" class="paste-zone" tabindex="0">
+      <p><strong>Or paste your graph screenshot here (Ctrl+V)</strong></p>
+    </div>
+  </div>
+
+  <canvas id="canvas" style="display:none;"></canvas>
+
+  <div id="outputContainer">
+    <h2>Graph Bar Values</h2>
+    <pre id="output"></pre>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
