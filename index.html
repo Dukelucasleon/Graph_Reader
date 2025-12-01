@@ -7,10 +7,13 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <h1>Upload or Paste Bar Graph to Process</h1>
+  <h1>Upload or Paste Graph to Process</h1>
   <p class="subtitle">
-    Upload a clear bar graph image. The program will automatically detect bar heights and output
-    numerical values. Ensure the graph has visible axes and clear bars.
+    Upload a bar graph image. After uploading, you will click:
+    <br>1) The origin (0,0)
+    <br>2) The top of the X-axis
+    <br>3) The top of the Y-axis.
+    <br>The program will then detect the bars and output their calibrated values.
   </p>
 
   <div class="upload-area">
@@ -22,7 +25,9 @@
     </div>
   </div>
 
-  <canvas id="canvas" style="display:none;"></canvas>
+  <div id="imageContainer">
+    <canvas id="canvas"></canvas>
+  </div>
 
   <div id="outputContainer">
     <h2>Graph Bar Values</h2>
