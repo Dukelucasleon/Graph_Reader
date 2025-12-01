@@ -32,7 +32,6 @@ pasteZone.addEventListener('paste', (event) => {
 async function loadImage(blob) {
   imgBitmap = await createImageBitmap(blob);
 
-  // Set canvas to exact image pixel size
   canvas.width = imgBitmap.width;
   canvas.height = imgBitmap.height;
 
@@ -48,22 +47,17 @@ async function loadImage(blob) {
 }
 
 /* ----------------------------------------------------------
-   CLICK HANDLING (FIXED)
+   CLICK HANDLING
 ---------------------------------------------------------- */
-
 canvas.addEventListener('click', (e) => {
   if (!imgBitmap) return;
 
-  // FIX: properly compute canvas-based coordinates even if resized
   const rect = canvas.getBoundingClientRect();
-
   const scaleX = canvas.width / rect.width;
   const scaleY = canvas.height / rect.height;
 
   const x = (e.clientX - rect.left) * scaleX;
   const y = (e.clientY - rect.top) * scaleY;
-
-  console.log("Click:", x, y);
 
   clicks.push({ x, y });
   clickStage++;
@@ -72,16 +66,23 @@ canvas.addEventListener('click', (e) => {
     output.textContent =
       `Point recorded.\n\nNext: ${instructions[clickStage]}`;
   } else {
-    output.textContent = "All points recorded.\n\nProcessing graph...";
-    setTimeout(processGraph, 300);
+    // Ask for Y-axis maximum value
+    const maxY = prompt("Enter the MAXIMUM value shown on the Y-axis (ex: 100):");
+
+    if (!maxY || isNaN(maxY)) {
+      output.textContent = "Invalid Y-axis maximum value. Please reload the image.";
+      return;
+    }
+
+    output.textContent = "Processing graph...";
+    setTimeout(() => processGraph(parseFloat(maxY)), 300);
   }
 });
 
 /* ----------------------------------------------------------
-   PROCESS GRAPH
+   PROCESS GRAPH (WITH USER-ENTERED MAX Y VALUE)
 ---------------------------------------------------------- */
-
-function processGraph() {
+function processGraph(maxYvalue) {
   convertToBW();
 
   const [origin, xTop, yTop] = clicks;
@@ -89,13 +90,12 @@ function processGraph() {
   const pixelYrange = origin.y - xTop.y;
 
   const bars = detectBars();
-
-  const calibrated = bars.map(pixels =>
-    (pixels / pixelYrange).toFixed(3)
+  const calibratedValues = bars.map(pix =>
+    ((pix / pixelYrange) * maxYvalue).toFixed(3)
   );
 
-  let text = "Detected Bar Values (Calibrated):\n\n";
-  calibrated.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
+  let text = `Detected Bar Values (0–${maxYvalue} scale):\n\n`;
+  calibratedValues.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
 
   output.textContent = text;
 }
@@ -103,7 +103,6 @@ function processGraph() {
 /* ----------------------------------------------------------
    BLACK & WHITE CONVERSION
 ---------------------------------------------------------- */
-
 function convertToBW() {
   const w = canvas.width;
   const h = canvas.height;
@@ -120,9 +119,8 @@ function convertToBW() {
 }
 
 /* ----------------------------------------------------------
-   BAR DETECTION
+   BAR DETECTION (BLACK/WHITE IMAGE)
 ---------------------------------------------------------- */
-
 function detectBars() {
   const w = canvas.width;
   const h = canvas.height;
@@ -142,7 +140,7 @@ function detectBars() {
 
   const threshold = Math.max(...darkness) * 0.4;
 
-  let bars = [];
+  const bars = [];
   let inBar = false;
   let start = 0;
 
