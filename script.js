@@ -14,19 +14,29 @@ const instructions = [
   "Click the TOP OF THE Y AXIS."
 ];
 
+/* ----------------------------
+   IMAGE LOAD HANDLERS
+---------------------------- */
 imageInput.addEventListener('change', (event) => {
   const file = event.target.files[0];
   if (file) loadImage(file);
 });
 
+pasteZone.addEventListener('click', () => {
+  pasteZone.focus();
+});
+
 pasteZone.addEventListener('paste', (event) => {
+  event.preventDefault();
   const items = event.clipboardData.items;
   for (let item of items) {
     if (item.type.indexOf('image') !== -1) {
-      loadImage(item.getAsFile());
-      break;
+      const file = item.getAsFile();
+      loadImage(file);
+      return; // stop after first image
     }
   }
+  alert("No image found in clipboard!");
 });
 
 async function loadImage(blob) {
@@ -46,9 +56,9 @@ async function loadImage(blob) {
     "\n\nClick directly on the image.";
 }
 
-/* ----------------------------------------------------------
-   HANDLE CLICK EVENTS
----------------------------------------------------------- */
+/* ----------------------------
+   CLICK HANDLING
+---------------------------- */
 canvas.addEventListener('click', (e) => {
   if (!imgBitmap) return;
 
@@ -78,15 +88,15 @@ canvas.addEventListener('click', (e) => {
   }
 });
 
-/* ----------------------------------------------------------
-   PROCESS GRAPH (FIXED VERSION)
----------------------------------------------------------- */
+/* ----------------------------
+   PROCESS GRAPH
+---------------------------- */
 function processGraph(maxYvalue) {
   convertToBW();
 
   const [origin, xTop, yTop] = clicks;
 
-  // FIX: Use top of Y axis for vertical span
+  // Correct vertical pixel range
   const pixelYrange = origin.y - yTop.y;
 
   if (pixelYrange <= 0) {
@@ -108,9 +118,9 @@ function processGraph(maxYvalue) {
   output.textContent = text;
 }
 
-/* ----------------------------------------------------------
-   BLACK & WHITE
----------------------------------------------------------- */
+/* ----------------------------
+   BLACK & WHITE CONVERSION
+---------------------------- */
 function convertToBW() {
   const w = canvas.width;
   const h = canvas.height;
@@ -126,6 +136,56 @@ function convertToBW() {
   ctx.putImageData(img, 0, 0);
 }
 
-/* ----------------------------------------------------------
-   DETECT BARS (B&W IMAGE)
-------------------------------------------------------
+/* ----------------------------
+   BAR DETECTION (BLACK & WHITE IMAGE)
+---------------------------- */
+function detectBars() {
+  const w = canvas.width;
+  const h = canvas.height;
+  const data = ctx.getImageData(0, 0, w, h).data;
+
+  const darkness = [];
+
+  for (let x = 0; x < w; x++) {
+    let dark = 0;
+
+    for (let y = 0; y < h; y++) {
+      if (data[(y * w + x) * 4] === 0) dark++;
+    }
+
+    darkness.push(dark);
+  }
+
+  const threshold = Math.max(...darkness) * 0.4;
+
+  let bars = [];
+  let inBar = false;
+  let start = 0;
+
+  for (let x = 0; x < w; x++) {
+    if (!inBar && darkness[x] > threshold) {
+      inBar = true;
+      start = x;
+    }
+    if (inBar && darkness[x] <= threshold) {
+      inBar = false;
+      bars.push({ start, end: x });
+    }
+  }
+
+  return bars.map(bar => {
+    const mid = Math.floor((bar.start + bar.end) / 2);
+    let topY = null;
+
+    for (let y = 0; y < h; y++) {
+      if (data[(y * w + mid) * 4] === 0) {
+        topY = y;
+        break;
+      }
+    }
+
+    if (topY === null) return NaN;
+
+    return h - topY;
+  });
+}
