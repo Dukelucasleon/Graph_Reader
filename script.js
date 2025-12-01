@@ -37,8 +37,8 @@ async function loadImage(blob) {
 
   ctx.drawImage(imgBitmap, 0, 0);
 
-  clickStage = 0;
   clicks = [];
+  clickStage = 0;
 
   output.textContent =
     "Image loaded.\n\n" +
@@ -47,7 +47,7 @@ async function loadImage(blob) {
 }
 
 /* ----------------------------------------------------------
-   CLICK HANDLING
+   HANDLE CLICK EVENTS
 ---------------------------------------------------------- */
 canvas.addEventListener('click', (e) => {
   if (!imgBitmap) return;
@@ -66,11 +66,10 @@ canvas.addEventListener('click', (e) => {
     output.textContent =
       `Point recorded.\n\nNext: ${instructions[clickStage]}`;
   } else {
-    // Ask for Y-axis maximum value
-    const maxY = prompt("Enter the MAXIMUM value shown on the Y-axis (ex: 100):");
+    const maxY = prompt("Enter the MAXIMUM value shown on the Y-axis (example: 100):");
 
     if (!maxY || isNaN(maxY)) {
-      output.textContent = "Invalid Y-axis maximum value. Please reload the image.";
+      output.textContent = "Invalid Y-axis max value. Reload the image to try again.";
       return;
     }
 
@@ -80,28 +79,37 @@ canvas.addEventListener('click', (e) => {
 });
 
 /* ----------------------------------------------------------
-   PROCESS GRAPH (WITH USER-ENTERED MAX Y VALUE)
+   PROCESS GRAPH (FIXED VERSION)
 ---------------------------------------------------------- */
 function processGraph(maxYvalue) {
   convertToBW();
 
   const [origin, xTop, yTop] = clicks;
 
-  const pixelYrange = origin.y - xTop.y;
+  // FIX: Use top of Y axis for vertical span
+  const pixelYrange = origin.y - yTop.y;
+
+  if (pixelYrange <= 0) {
+    output.textContent =
+      "Error: Y-axis top must be ABOVE origin.\nReload image and click again.";
+    return;
+  }
 
   const bars = detectBars();
-  const calibratedValues = bars.map(pix =>
-    ((pix / pixelYrange) * maxYvalue).toFixed(3)
-  );
+
+  const calibrated = bars.map(pix => {
+    if (!isFinite(pix)) return "Unreadable";
+    return ((pix / pixelYrange) * maxYvalue).toFixed(3);
+  });
 
   let text = `Detected Bar Values (0–${maxYvalue} scale):\n\n`;
-  calibratedValues.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
+  calibrated.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
 
   output.textContent = text;
 }
 
 /* ----------------------------------------------------------
-   BLACK & WHITE CONVERSION
+   BLACK & WHITE
 ---------------------------------------------------------- */
 function convertToBW() {
   const w = canvas.width;
@@ -119,53 +127,5 @@ function convertToBW() {
 }
 
 /* ----------------------------------------------------------
-   BAR DETECTION (BLACK/WHITE IMAGE)
----------------------------------------------------------- */
-function detectBars() {
-  const w = canvas.width;
-  const h = canvas.height;
-  const data = ctx.getImageData(0, 0, w, h).data;
-
-  const darkness = [];
-
-  for (let x = 0; x < w; x++) {
-    let dark = 0;
-
-    for (let y = 0; y < h; y++) {
-      if (data[(y * w + x) * 4] === 0) dark++;
-    }
-
-    darkness.push(dark);
-  }
-
-  const threshold = Math.max(...darkness) * 0.4;
-
-  const bars = [];
-  let inBar = false;
-  let start = 0;
-
-  for (let x = 0; x < w; x++) {
-    if (!inBar && darkness[x] > threshold) {
-      inBar = true;
-      start = x;
-    }
-    if (inBar && darkness[x] <= threshold) {
-      inBar = false;
-      bars.push({ start, end: x });
-    }
-  }
-
-  return bars.map(bar => {
-    const mid = Math.floor((bar.start + bar.end) / 2);
-    let topY = null;
-
-    for (let y = 0; y < h; y++) {
-      if (data[(y * w + mid) * 4] === 0) {
-        topY = y;
-        break;
-      }
-    }
-
-    return h - topY;
-  });
-}
+   DETECT BARS (B&W IMAGE)
+------------------------------------------------------
