@@ -118,7 +118,7 @@ function processGraph(maxYvalue) {
     }
   });
 
-  // Calculate values left-to-right
+  // Sort bars left-to-right
   bars.sort((a, b) => a.midX - b.midX);
 
   const calibrated = bars.map(bar => {
@@ -170,15 +170,17 @@ function convertToBW() {
 }
 
 /* ----------------------------
-   BAR DETECTION
+   BAR DETECTION (RIGHT OF Y-AXIS ONLY)
 ---------------------------- */
 function detectBars() {
   const w = canvas.width;
   const h = canvas.height;
   const data = ctx.getImageData(0, 0, w, h).data;
 
+  const originX = clicks[0]?.x || 0; // ignore left of Y-axis
+
   const darkness = [];
-  for (let x = 0; x < w; x++) {
+  for (let x = Math.floor(originX); x < w; x++) {
     let dark = 0;
     for (let y = 0; y < h; y++) {
       if (data[(y * w + x) * 4] === 0) dark++;
@@ -192,12 +194,13 @@ function detectBars() {
   let inBar = false;
   let start = 0;
 
-  for (let x = 0; x < w; x++) {
-    if (!inBar && darkness[x] > threshold) {
+  for (let i = 0; i < darkness.length; i++) {
+    const x = i + Math.floor(originX); // real x-coordinate
+    if (!inBar && darkness[i] > threshold) {
       inBar = true;
       start = x;
     }
-    if (inBar && darkness[x] <= threshold) {
+    if (inBar && darkness[i] <= threshold) {
       inBar = false;
       bars.push({ start, end: x });
     }
