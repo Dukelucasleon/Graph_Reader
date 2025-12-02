@@ -1,221 +1,103 @@
-const imageInput = document.getElementById('imageInput');
-const pasteZone = document.getElementById('pasteZone');
-const output = document.getElementById('output');
-const canvas = document.getElementById('canvas');
-const ctx = canvas.getContext('2d');
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+const output = document.getElementById("output");
+const imageInput = document.getElementById("imageInput");
+const pasteZone = document.getElementById("pasteZone");
 
-let imgBitmap = null;
-let clicks = [];
-let clickStage = 0;
+let origin = null;
+let xAxisTop = null;
+let yAxisTop = null;
+let maxYValue = null;
 
-const instructions = [
-  "Click the ORIGIN (0,0).",
-  "Click the TOP OF THE X AXIS.",
-  "Click the TOP OF THE Y AXIS."
-];
-
-/* ----------------------------
-   IMAGE LOAD HANDLERS
----------------------------- */
-imageInput.addEventListener('change', (event) => {
-  const file = event.target.files[0];
-  if (file) loadImage(file);
+// Load image from file
+imageInput.addEventListener("change", e => {
+  const file = e.target.files[0];
+  if (file) {
+    const img = new Image();
+    img.onload = () => drawImage(img);
+    img.src = URL.createObjectURL(file);
+  }
 });
 
-pasteZone.addEventListener('click', () => {
-  pasteZone.focus();
-});
-
-pasteZone.addEventListener('paste', (event) => {
-  event.preventDefault();
-  const items = event.clipboardData.items;
+// Load image from paste
+pasteZone.addEventListener("paste", e => {
+  const items = e.clipboardData.items;
   for (let item of items) {
-    if (item.type.indexOf('image') !== -1) {
+    if (item.type.indexOf("image") !== -1) {
       const file = item.getAsFile();
-      loadImage(file);
-      return; // stop after first image
+      const img = new Image();
+      img.onload = () => drawImage(img);
+      img.src = URL.createObjectURL(file);
     }
-  }
-  alert("No image found in clipboard!");
-});
-
-async function loadImage(blob) {
-  imgBitmap = await createImageBitmap(blob);
-
-  canvas.width = imgBitmap.width;
-  canvas.height = imgBitmap.height;
-
-  ctx.drawImage(imgBitmap, 0, 0);
-
-  clicks = [];
-  clickStage = 0;
-
-  output.textContent =
-    "Image loaded.\n\n" +
-    "Now: " + instructions[clickStage] +
-    "\n\nClick directly on the image.";
-}
-
-/* ----------------------------
-   CLICK HANDLING
----------------------------- */
-canvas.addEventListener('click', (e) => {
-  if (!imgBitmap) return;
-
-  const rect = canvas.getBoundingClientRect();
-  const scaleX = canvas.width / rect.width;
-  const scaleY = canvas.height / rect.height;
-
-  const x = (e.clientX - rect.left) * scaleX;
-  const y = (e.clientY - rect.top) * scaleY;
-
-  clicks.push({ x, y });
-  clickStage++;
-
-  drawCanvas(); // redraw image and click markers
-
-  if (clickStage < 3) {
-    output.textContent =
-      `Point recorded.\n\nNext: ${instructions[clickStage]}`;
-  } else {
-    const maxY = prompt("Enter the MAXIMUM value shown on the Y-axis (example: 100):");
-
-    if (!maxY || isNaN(maxY)) {
-      output.textContent = "Invalid Y-axis max value. Reload the image to try again.";
-      return;
-    }
-
-    output.textContent = "Processing graph...";
-    setTimeout(() => processGraph(parseFloat(maxY)), 300);
   }
 });
 
-/* ----------------------------
-   PROCESS GRAPH
----------------------------- */
-function processGraph(maxYvalue) {
-  convertToBW();
+// Draw image and convert to black & white
+function drawImage(img) {
+  canvas.width = img.width;
+  canvas.height = img.height;
+  ctx.drawImage(img, 0, 0);
+  convertToBlackAndWhite();
+}
 
-  const [origin, xTop, yTop] = clicks;
+// Convert to black & white
+function convertToBlackAndWhite() {
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
 
-  const pixelYrange = origin.y - yTop.y;
-  if (pixelYrange <= 0) {
-    output.textContent =
-      "Error: Y-axis top must be ABOVE origin.\nReload image and click again.";
-    return;
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i+1], b = data[i+2];
+    const brightness = 0.299*r + 0.587*g + 0.114*b;
+    const threshold = 220; // tweakable
+    const value = brightness < threshold ? 0 : 255;
+    data[i] = data[i+1] = data[i+2] = value;
   }
 
-  const bars = detectBars();
-
-  // Draw bar top markers
-  drawCanvas(); // redraw image and calibration clicks first
-  ctx.fillStyle = 'red';
-  bars.forEach(bar => {
-    if (!isNaN(bar.topY)) {
-      ctx.beginPath();
-      ctx.arc(bar.midX, bar.topY, 4, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  });
-
-  // Sort bars left-to-right
-  bars.sort((a, b) => a.midX - b.midX);
-
-  const calibrated = bars.map(bar => {
-    if (!isFinite(bar.height)) return "Unreadable";
-    return ((bar.height / pixelYrange) * maxYvalue).toFixed(3);
-  });
-
-  let text = `Detected Bar Values (0–${maxYvalue} scale), left to right:\n\n`;
-  calibrated.forEach((v, i) => (text += `Bar ${i + 1}: ${v}\n`));
-
-  output.textContent = text;
+  ctx.putImageData(imageData, 0, 0);
 }
 
-/* ----------------------------
-   DRAW IMAGE AND CLICK MARKERS
----------------------------- */
-function drawCanvas() {
-  if (!imgBitmap) return;
-  ctx.drawImage(imgBitmap, 0, 0);
-
-  // Draw click markers
-  clicks.forEach((pt, i) => {
-    ctx.fillStyle = ['blue', 'green', 'orange'][i] || 'black';
-    ctx.beginPath();
-    ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = 'black';
-    ctx.font = '14px Arial';
-    ctx.fillText(['ORIGIN','X-TOP','Y-TOP'][i], pt.x + 6, pt.y - 6);
-  });
-}
-
-/* ----------------------------
-   BLACK & WHITE CONVERSION
----------------------------- */
-function convertToBW() {
-  const w = canvas.width;
-  const h = canvas.height;
-  const img = ctx.getImageData(0, 0, w, h);
-  const d = img.data;
-
-  for (let i = 0; i < d.length; i += 4) {
-    const bright = (d[i] + d[i+1] + d[i+2]) / 3;
-    const v = bright < 150 ? 0 : 255;
-    d[i] = d[i+1] = d[i+2] = v;
-  }
-
-  ctx.putImageData(img, 0, 0);
-}
-
-/* ----------------------------
-   BAR DETECTION (RIGHT OF Y-AXIS ONLY)
----------------------------- */
+// Detect bars
 function detectBars() {
-  const w = canvas.width;
-  const h = canvas.height;
-  const data = ctx.getImageData(0, 0, w, h).data;
+  const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  const data = imageData.data;
+  const bars = [];
 
-  const originX = clicks[0]?.x || 0; // ignore left of Y-axis
-
-  const darkness = [];
-  for (let x = Math.floor(originX); x < w; x++) {
-    let dark = 0;
-    for (let y = 0; y < h; y++) {
-      if (data[(y * w + x) * 4] === 0) dark++;
-    }
-    darkness.push(dark);
-  }
-
-  const threshold = Math.max(...darkness) * 0.4;
-
-  let bars = [];
-  let inBar = false;
-  let start = 0;
-
-  for (let i = 0; i < darkness.length; i++) {
-    const x = i + Math.floor(originX); // real x-coordinate
-    if (!inBar && darkness[i] > threshold) {
-      inBar = true;
-      start = x;
-    }
-    if (inBar && darkness[i] <= threshold) {
-      inBar = false;
-      bars.push({ start, end: x });
-    }
-  }
-
-  return bars.map(bar => {
-    const mid = Math.floor((bar.start + bar.end) / 2);
-    let topY = null;
-    for (let y = 0; y < h; y++) {
-      if (data[(y * w + mid) * 4] === 0) {
-        topY = y;
-        break;
+  // Simple vertical scan
+  for (let x = 0; x < canvas.width; x++) {
+    let barHeight = 0;
+    let maxHeight = 0;
+    for (let y = canvas.height - 1; y >= 0; y--) {
+      const idx = (y * canvas.width + x) * 4;
+      const r = data[idx], g = data[idx+1], b = data[idx+2];
+      if (isNonWhitePixel(r, g, b)) {
+        barHeight++;
+        maxHeight = Math.max(maxHeight, barHeight);
+      } else {
+        barHeight = 0;
       }
     }
-    if (topY === null) return { midX: mid, topY: null, height: NaN };
-    return { midX: mid, topY, height: h - topY };
-  });
+    if (isBarRegion(1, maxHeight)) {
+      bars.push({ x, height: maxHeight });
+    }
+  }
+
+  output.textContent = JSON.stringify(bars, null, 2);
 }
+
+// Pixel deviancy from white
+function isNonWhitePixel(r, g, b, threshold=40) {
+  const distance = Math.sqrt(
+    Math.pow(255-r, 2) + Math.pow(255-g, 2) + Math.pow(255-b, 2)
+  );
+  return distance > threshold;
+}
+
+// Minimum bar size filter
+function isBarRegion(regionWidth, regionHeight, minWidth=5, minHeight=20) {
+  return regionWidth >= minWidth && regionHeight >= minHeight;
+}
+
+// Example: run detection after clicking canvas
+canvas.addEventListener("click", () => {
+  detectBars();
+});
