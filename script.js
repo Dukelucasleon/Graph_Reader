@@ -101,7 +101,14 @@ function convertToBlackAndWhite() {
   ctx.putImageData(imageData, 0, 0);
 }
 
-// Detect bars
+function isNonWhitePixel(r, g, b, threshold=40) {
+  const distance = Math.sqrt(
+    Math.pow(255-r, 2) + Math.pow(255-g, 2) + Math.pow(255-b, 2)
+  );
+  return distance > threshold;
+}
+
+// Detect bars + compute values based on origin & Y-axis top
 function processGraph(maxYValue) {
   // redraw original first
   ctx.drawImage(img, 0, 0);
@@ -145,12 +152,17 @@ function processGraph(maxYValue) {
     }
   }
 
-  output.textContent = JSON.stringify(bars, null, 2);
-}
+  // --- NEW: compute actual bar values -------------------------------------
+  const origin = clicks[0];
+  const yTop = clicks[1];
+  const pixelYDistance = origin.y - yTop.y; // pixels of full Y scale
 
-function isNonWhitePixel(r, g, b, threshold=40) {
-  const distance = Math.sqrt(
-    Math.pow(255-r, 2) + Math.pow(255-g, 2) + Math.pow(255-b, 2)
-  );
-  return distance > threshold;
+  const values = bars.map(b => {
+    // detected bar height = pixels of bar
+    const ratio = b.height / pixelYDistance;
+    return parseFloat((ratio * maxYValue).toFixed(2));
+  });
+
+  // Output only list of numbers
+  output.textContent = values.join("\n");
 }
