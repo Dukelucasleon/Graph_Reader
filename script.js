@@ -110,7 +110,11 @@ function isNonWhitePixel(r, g, b, threshold=40) {
 
 // Detect bars + compute values based on origin & Y-axis top
 function processGraph(maxYValue) {
-  // redraw original first
+  if (clicks.length < 2) {
+    output.textContent = "Please click the ORIGIN and TOP of Y-axis first.";
+    return;
+  }
+
   ctx.drawImage(img, 0, 0);
   convertToBlackAndWhite();
 
@@ -118,20 +122,25 @@ function processGraph(maxYValue) {
   const data = imageData.data;
   const bars = [];
 
-  // min width is 5% of canvas width as before
   const minWidth = Math.floor(canvas.width * 0.05);
   const minHeight = 20;
+  const margin = 5; // allowed vertical margin for bottom pixel near origin
 
   let currentBar = null;
+  let barBottomY = null; // lowest y pixel in bar
+
   for (let x = 0; x < canvas.width; x++) {
     let maxHeight = 0;
     let barHeight = 0;
+    let lowestYForColumn = null;
+
     for (let y = canvas.height - 1; y >= 0; y--) {
       const idx = (y * canvas.width + x) * 4;
-      const r = data[idx], g = data[idx+1], b = data[idx+2];
+      const r = data[idx], g = data[idx + 1], b = data[idx + 2];
       if (isNonWhitePixel(r, g, b)) {
         barHeight++;
         maxHeight = Math.max(maxHeight, barHeight);
+        lowestYForColumn = y; // update lowest pixel with a black pixel found
       } else {
         barHeight = 0;
       }
@@ -140,15 +149,22 @@ function processGraph(maxYValue) {
     if (maxHeight >= minHeight) {
       if (!currentBar) {
         currentBar = { startX: x, height: maxHeight };
+        barBottomY = lowestYForColumn;
       }
       currentBar.endX = x;
+      // track the minimum (lowest) y pixel across all columns in this bar
+      if (lowestYForColumn !== null && lowestYForColumn > barBottomY) {
+        barBottomY = lowestYForColumn;
+      }
     } else {
       if (currentBar) {
         const width = currentBar.endX - currentBar.startX + 1;
-        if (width >= minWidth) {
-          bars.push({ x: currentBar.startX, width, height: currentBar.height });
+        // check if bottom of bar is near origin.y within margin
+        if (width >= minWidth && Math.abs(barBottomY - clicks[0].y) <= margin) {
+          bars.push({ x: currentBar.startX, width, height: currentBar.height, bottomY: barBottomY });
         }
         currentBar = null;
+        barBottomY = null;
       }
     }
   }
@@ -157,14 +173,17 @@ function processGraph(maxYValue) {
   const yTop = clicks[1];
   const pixelYDistance = origin.y - yTop.y;
 
-  // Map bars to formatted string showing position and value
   const outputLines = bars.map(b => {
     const ratio = b.height / pixelYDistance;
     const value = (ratio * maxYValue).toFixed(2);
     return `X: ${b.x} → Value: ${value}`;
   });
 
-  output.textContent = outputLines.join("\n");
+  if (outputLines.length === 0) {
+    output.textContent = "No bars detected aligned with origin.";
+  } else {
+    output.textContent = outputLines.join("\n");
+  }
 }
 
   // --- NEW: compute actual bar values -------------------------------------
