@@ -4,17 +4,21 @@ const output = document.getElementById("output");
 const imageInput = document.getElementById("imageInput");
 const pasteZone = document.getElementById("pasteZone");
 
-let origin = null;
-let yAxisTop = null;
+let img = null;
+let clicks = [];
+let clickStage = 0;
 let maxYValue = null;
 
 // Load image from file
 imageInput.addEventListener("change", e => {
   const file = e.target.files[0];
   if (file) {
-    const img = new Image();
-    img.onload = () => drawImage(img);
-    img.src = URL.createObjectURL(file);
+    const newImg = new Image();
+    newImg.onload = () => {
+      img = newImg;
+      resetCanvas();
+    };
+    newImg.src = URL.createObjectURL(file);
   }
 });
 
@@ -24,20 +28,62 @@ pasteZone.addEventListener("paste", e => {
   for (let item of items) {
     if (item.type.indexOf("image") !== -1) {
       const file = item.getAsFile();
-      const img = new Image();
-      img.onload = () => drawImage(img);
-      img.src = URL.createObjectURL(file);
+      const newImg = new Image();
+      newImg.onload = () => {
+        img = newImg;
+        resetCanvas();
+      };
+      newImg.src = URL.createObjectURL(file);
     }
   }
 });
 
-// Draw image and convert to black & white
-function drawImage(img) {
+function resetCanvas() {
   canvas.width = img.width;
   canvas.height = img.height;
-  ctx.drawImage(img, 0, 0);
-  convertToBlackAndWhite();
+  clicks = [];
+  clickStage = 0;
+  maxYValue = null;
+  drawCanvas();
+  output.textContent = "Image loaded.\n\nClick the ORIGIN (0,0).";
 }
+
+function drawCanvas() {
+  if (!img) return;
+  ctx.drawImage(img, 0, 0);
+  // draw dots
+  clicks.forEach(pt => {
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI);
+    ctx.fill();
+  });
+}
+
+// Handle clicks
+canvas.addEventListener("click", e => {
+  if (!img) return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  clicks.push({ x, y });
+  clickStage++;
+  drawCanvas();
+
+  if (clickStage === 1) {
+    output.textContent = "Origin recorded.\n\nNow click the TOP of the Y-axis.";
+  } else if (clickStage === 2) {
+    output.textContent = "Y-axis top recorded.\n\nEnter the MAXIMUM Y-axis value.";
+    maxYValue = prompt("Enter maximum Y-axis value:");
+    if (maxYValue && !isNaN(maxYValue)) {
+      output.textContent = "Processing graph...";
+      setTimeout(() => processGraph(parseFloat(maxYValue)), 300);
+    } else {
+      output.textContent = "Invalid Y-axis max value. Reload the image to try again.";
+    }
+  }
+});
 
 // Convert to strict black & white (off-whites → black)
 function convertToBlackAndWhite() {
@@ -47,7 +93,7 @@ function convertToBlackAndWhite() {
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i+1], b = data[i+2];
     const brightness = 0.299*r + 0.587*g + 0.114*b;
-    const threshold = 245; // stricter cutoff
+    const threshold = 245;
     const value = brightness < threshold ? 0 : 255;
     data[i] = data[i+1] = data[i+2] = value;
   }
@@ -56,15 +102,18 @@ function convertToBlackAndWhite() {
 }
 
 // Detect bars
-function detectBars() {
+function processGraph(maxYValue) {
+  // redraw original first
+  ctx.drawImage(img, 0, 0);
+  convertToBlackAndWhite();
+
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
   const bars = [];
 
   const minWidth = Math.floor(canvas.width * 0.07); // 7% of width
-  const minHeight = 20; // keep a minimum height
+  const minHeight = 20;
 
-  // Scan columns
   let currentBar = null;
   for (let x = 0; x < canvas.width; x++) {
     let maxHeight = 0;
@@ -99,31 +148,9 @@ function detectBars() {
   output.textContent = JSON.stringify(bars, null, 2);
 }
 
-// Pixel deviancy from white
 function isNonWhitePixel(r, g, b, threshold=40) {
   const distance = Math.sqrt(
     Math.pow(255-r, 2) + Math.pow(255-g, 2) + Math.pow(255-b, 2)
   );
   return distance > threshold;
 }
-
-// Draw dot where clicked (no text)
-canvas.addEventListener("click", e => {
-  const rect = canvas.getBoundingClientRect();
-  const x = e.clientX - rect.left;
-  const y = e.clientY - rect.top;
-
-  ctx.fillStyle = "red";
-  ctx.beginPath();
-  ctx.arc(x, y, 4, 0, 2 * Math.PI);
-  ctx.fill();
-
-  if (!origin) {
-    origin = { x, y };
-  } else if (!yAxisTop) {
-    yAxisTop = { x, y };
-    maxYValue = prompt("Enter maximum Y-axis value:");
-  } else {
-    detectBars();
-  }
-});
