@@ -9,8 +9,7 @@ let img = new Image();
 
 // ==== HELPER FUNCTIONS ====
 function isNonWhitePixel(r, g, b) {
-  // returns true if pixel is not white (can adjust threshold if needed)
-  return r + g + b < 750; 
+  return r + g + b < 750; // simple threshold for non-white
 }
 
 function convertToBlackAndWhite() {
@@ -57,18 +56,38 @@ pasteZone.addEventListener('paste', (e) => {
 
 pasteZone.addEventListener('click', () => pasteZone.focus());
 
-// ==== CANVAS CLICK HANDLING ====
+// ==== CANVAS CLICK HANDLING WITH VISUAL FEEDBACK AND PROMPT ====
 canvas.addEventListener('click', (e) => {
-  if (clicks.length >= 2) return; // only allow 2 clicks
+  if (clicks.length >= 2) return; 
   const rect = canvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
   clicks.push({ x, y });
 
+  // redraw image and draw markers
+  ctx.drawImage(img, 0, 0);
+  clicks.forEach((c, i) => {
+    ctx.fillStyle = i === 0 ? 'red' : 'blue'; // origin red, top blue
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // optional labels
+    ctx.fillStyle = 'black';
+    ctx.font = '12px Arial';
+    ctx.fillText(i === 0 ? 'Origin' : 'Top', c.x + 8, c.y - 8);
+  });
+
   if (clicks.length === 1) {
-    output.textContent = 'Origin selected. Now click TOP of Y-axis.';
+    output.textContent = 'Origin selected (red). Now click TOP of Y-axis (blue).';
   } else if (clicks.length === 2) {
-    output.textContent = 'Top of Y-axis selected. Enter MAX Y-axis value to process.';
+    const maxYValue = parseFloat(prompt('Enter the MAXIMUM Y-axis value:'));
+    if (!isNaN(maxYValue)) {
+      processGraph(maxYValue);
+    } else {
+      output.textContent = 'Invalid MAX Y value. Click TOP of Y-axis again.';
+      clicks.pop(); // remove last click so they can try again
+    }
   }
 });
 
@@ -80,6 +99,16 @@ function processGraph(maxYValue) {
   }
 
   ctx.drawImage(img, 0, 0);
+  clicks.forEach((c, i) => { // redraw click markers
+    ctx.fillStyle = i === 0 ? 'red' : 'blue';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'black';
+    ctx.font = '12px Arial';
+    ctx.fillText(i === 0 ? 'Origin' : 'Top', c.x + 8, c.y - 8);
+  });
+
   convertToBlackAndWhite();
 
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
