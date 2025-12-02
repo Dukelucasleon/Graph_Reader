@@ -118,7 +118,8 @@ function processGraph(maxYValue) {
   const data = imageData.data;
   const bars = [];
 
-  const minWidth = Math.floor(canvas.width * 0.025); // 2.5% of width
+  // min width is 5% of canvas width as before
+  const minWidth = Math.floor(canvas.width * 0.05);
   const minHeight = 20;
 
   let currentBar = null;
@@ -151,6 +152,20 @@ function processGraph(maxYValue) {
       }
     }
   }
+
+  const origin = clicks[0];
+  const yTop = clicks[1];
+  const pixelYDistance = origin.y - yTop.y;
+
+  // Map bars to formatted string showing position and value
+  const outputLines = bars.map(b => {
+    const ratio = b.height / pixelYDistance;
+    const value = (ratio * maxYValue).toFixed(2);
+    return `X: ${b.x} → Value: ${value}`;
+  });
+
+  output.textContent = outputLines.join("\n");
+}
 
   // --- NEW: compute actual bar values -------------------------------------
   const origin = clicks[0];
