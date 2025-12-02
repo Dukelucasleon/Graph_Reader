@@ -5,7 +5,6 @@ const imageInput = document.getElementById("imageInput");
 const pasteZone = document.getElementById("pasteZone");
 
 let origin = null;
-let xAxisTop = null;
 let yAxisTop = null;
 let maxYValue = null;
 
@@ -40,7 +39,7 @@ function drawImage(img) {
   convertToBlackAndWhite();
 }
 
-// Convert to black & white
+// Convert to strict black & white (off-whites → black)
 function convertToBlackAndWhite() {
   const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const data = imageData.data;
@@ -48,7 +47,7 @@ function convertToBlackAndWhite() {
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i+1], b = data[i+2];
     const brightness = 0.299*r + 0.587*g + 0.114*b;
-    const threshold = 220; // tweakable
+    const threshold = 245; // stricter cutoff
     const value = brightness < threshold ? 0 : 255;
     data[i] = data[i+1] = data[i+2] = value;
   }
@@ -62,10 +61,14 @@ function detectBars() {
   const data = imageData.data;
   const bars = [];
 
-  // Simple vertical scan
+  const minWidth = Math.floor(canvas.width * 0.07); // 7% of width
+  const minHeight = 20; // keep a minimum height
+
+  // Scan columns
+  let currentBar = null;
   for (let x = 0; x < canvas.width; x++) {
-    let barHeight = 0;
     let maxHeight = 0;
+    let barHeight = 0;
     for (let y = canvas.height - 1; y >= 0; y--) {
       const idx = (y * canvas.width + x) * 4;
       const r = data[idx], g = data[idx+1], b = data[idx+2];
@@ -76,8 +79,20 @@ function detectBars() {
         barHeight = 0;
       }
     }
-    if (isBarRegion(1, maxHeight)) {
-      bars.push({ x, height: maxHeight });
+
+    if (maxHeight >= minHeight) {
+      if (!currentBar) {
+        currentBar = { startX: x, height: maxHeight };
+      }
+      currentBar.endX = x;
+    } else {
+      if (currentBar) {
+        const width = currentBar.endX - currentBar.startX + 1;
+        if (width >= minWidth) {
+          bars.push({ x: currentBar.startX, width, height: currentBar.height });
+        }
+        currentBar = null;
+      }
     }
   }
 
@@ -92,12 +107,23 @@ function isNonWhitePixel(r, g, b, threshold=40) {
   return distance > threshold;
 }
 
-// Minimum bar size filter
-function isBarRegion(regionWidth, regionHeight, minWidth=5, minHeight=20) {
-  return regionWidth >= minWidth && regionHeight >= minHeight;
-}
+// Draw dot where clicked (no text)
+canvas.addEventListener("click", e => {
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
 
-// Example: run detection after clicking canvas
-canvas.addEventListener("click", () => {
-  detectBars();
+  ctx.fillStyle = "red";
+  ctx.beginPath();
+  ctx.arc(x, y, 4, 0, 2 * Math.PI);
+  ctx.fill();
+
+  if (!origin) {
+    origin = { x, y };
+  } else if (!yAxisTop) {
+    yAxisTop = { x, y };
+    maxYValue = prompt("Enter maximum Y-axis value:");
+  } else {
+    detectBars();
+  }
 });
