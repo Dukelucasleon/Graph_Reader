@@ -118,7 +118,7 @@ function processGraph(maxYValue) {
   const data = imageData.data;
   const bars = [];
 
-  const minWidth = Math.floor(canvas.width * 0.04); // 5% of width
+  const minWidth = Math.floor(canvas.width * 0.025); // 2.5% of width
   const minHeight = 20;
 
   let currentBar = null;
